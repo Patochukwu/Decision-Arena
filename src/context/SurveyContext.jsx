@@ -46,7 +46,15 @@ export const SurveyProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    fetchSurveys().finally(() => setLoading(false));
+    const init = async () => {
+      try {
+        await fetchSurveys();
+      } catch (err) {
+        console.error('Fetch surveys failed:', err);
+      }
+      setLoading(false);
+    };
+    init();
   }, [fetchSurveys]);
 
   // ── Admin Actions ──────────────────────────────────────────────────────────
