@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getSurveys, saveSurveys, getVoteRecord, saveVoteRecord } from '../utils/storage';
 import { generateId, MAX_VOTE_CHANGES, isVotingOpen, getSurveyTimeStatus } from '../utils/helpers';
 
@@ -13,6 +13,7 @@ export const useSurveys = () => {
 export const SurveyProvider = ({ children }) => {
   const [surveys, setSurveys] = useState([]);
   const [loading, setLoading] = useState(true);
+  const syncTimeoutRef = useRef(null);
 
   const fetchSurveys = useCallback(async () => {
     try {
@@ -36,21 +37,29 @@ export const SurveyProvider = ({ children }) => {
     fetchSurveys().finally(() => setLoading(false));
   }, [fetchSurveys]);
 
-  const persist = async (updated) => {
-    // Optimistic UI updates
+  const persist = useCallback((updated) => {
+    // 1. Instant Optimistic UI and Local Cache Update (Snappy visual updates)
     setSurveys(updated);
     saveSurveys(updated);
 
-    try {
-      await fetch('/api/surveys', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ surveys: updated }),
-      });
-    } catch (err) {
-      console.error('Failed to sync surveys to the cloud database:', err);
+    // 2. Clear any pending debounced sync
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
     }
-  };
+
+    // 3. Batch and delay cloud database save by 600ms to reduce network congestion
+    syncTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fetch('/api/surveys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surveys: updated }),
+        });
+      } catch (err) {
+        console.error('Failed to sync surveys to the cloud database:', err);
+      }
+    }, 600);
+  }, []);
 
   // ── Admin Actions ──────────────────────────────────────────────────────────
 

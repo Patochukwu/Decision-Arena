@@ -21,6 +21,9 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
+      // Enable Vercel Edge CDN Caching (1s fresh, stale for 9s while revalidating in background)
+      res.setHeader('Cache-Control', 'public, s-maxage=1, stale-while-revalidate=9');
+
       const response = await fetch(SURVEYS_BIN_URL);
       if (!response.ok) {
         throw new Error(`Failed to fetch from backend storage: ${response.statusText}`);
