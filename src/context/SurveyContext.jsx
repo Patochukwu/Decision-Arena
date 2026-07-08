@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getSurveys, saveSurveys, getVoteRecord, saveVoteRecord } from '../utils/storage';
 import { generateId, MAX_VOTE_CHANGES, isVotingOpen, getSurveyTimeStatus } from '../utils/helpers';
 
-const SURVEYS_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/efcaebe';
 const SurveyContext = createContext(null);
 
 export const useSurveys = () => {
@@ -17,7 +16,7 @@ export const SurveyProvider = ({ children }) => {
 
   const fetchSurveys = useCallback(async () => {
     try {
-      const res = await fetch(SURVEYS_BIN_URL);
+      const res = await fetch('/api/surveys');
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.surveys)) {
@@ -27,9 +26,9 @@ export const SurveyProvider = ({ children }) => {
         }
       }
     } catch (err) {
-      console.error('Failed to fetch cloud surveys:', err);
+      console.error('Failed to fetch surveys from Vercel API:', err);
     }
-    // Fallback to local storage
+    // Fallback to local storage (e.g., local development mode)
     setSurveys(getSurveys());
   }, []);
 
@@ -43,7 +42,7 @@ export const SurveyProvider = ({ children }) => {
     saveSurveys(updated);
 
     try {
-      await fetch(SURVEYS_BIN_URL, {
+      await fetch('/api/surveys', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ surveys: updated }),
