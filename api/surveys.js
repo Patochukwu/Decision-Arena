@@ -1,23 +1,24 @@
 // api/surveys.js
-// Vercel Serverless Function - PostgreSQL (Lazy Initialization)
-import postgres from 'postgres';
+// Vercel Serverless Function - PostgreSQL (Standard pg client)
+import pg from 'pg';
 
+const { Pool } = pg;
 const HAS_POSTGRES = Boolean(process.env.DATABASE_URL);
 
-let sql = null;
-function getSql() {
-  if (!sql) {
+let pool = null;
+function getPool() {
+  if (!pool) {
     if (!process.env.DATABASE_URL) {
       throw new Error('DATABASE_URL environment variable is missing.');
     }
-    sql = postgres(process.env.DATABASE_URL, {
-      ssl: 'require',
-      max: 10,
-      idle_timeout: 20,
-      connect_timeout: 10
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
     });
   }
-  return sql;
+  return pool;
 }
 
 // Default Seed surveys
@@ -71,9 +72,9 @@ const DEFAULT_SURVEYS = [
 // Helper to initialize Postgres table and seed data
 async function initDb() {
   try {
-    const db = getSql();
+    const db = getPool();
     // 1. Create table
-    await db`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS surveys (
         id VARCHAR(255) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
@@ -84,26 +85,27 @@ async function initDb() {
         end_date TIMESTAMP WITH TIME ZONE,
         options JSONB NOT NULL
       )
-    `;
+    `);
 
     // 2. Check if table is empty
-    const countResult = await db`SELECT count(*) FROM surveys`;
-    if (parseInt(countResult[0].count) === 0) {
+    const countResult = await db.query('SELECT count(*) FROM surveys');
+    if (parseInt(countResult.rows[0].count) === 0) {
       console.log("Postgres database is empty. Seeding default surveys...");
       for (const s of DEFAULT_SURVEYS) {
-        await db`
-          INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
-          VALUES (
-            ${s.id}, 
-            ${s.title}, 
-            ${s.description}, 
-            ${s.status}, 
-            ${s.createdAt}, 
-            ${s.startDate}, 
-            ${s.endDate}, 
-            ${JSON.stringify(s.options)}
-          )
-        `;
+        await db.query(
+          `INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            s.id, 
+            s.title, 
+            s.description, 
+            s.status, 
+            s.createdAt, 
+            s.startDate, 
+            s.endDate, 
+            JSON.stringify(s.options)
+          ]
+        );
       }
     }
   } catch (err) {
@@ -153,9 +155,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      const db = getSql();
-      const rows = await db`SELECT * FROM surveys ORDER BY created_at DESC`;
-      const surveys = rows.map(r => ({
+      const db = getPool();
+      const result = await db.query('SELECT * FROM surveys ORDER BY created_at DESC');
+      const surveys = result.rows.map(r => ({
         id: r.id,
         title: r.title,
         description: r.description,
@@ -177,20 +179,21 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const s = req.body;
-      const db = getSql();
-      await db`
-        INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
-        VALUES (
-          ${s.id}, 
-          ${s.title}, 
-          ${s.description}, 
-          ${s.status}, 
-          ${s.createdAt}, 
-          ${s.startDate ?? null}, 
-          ${s.endDate ?? null}, 
-          ${JSON.stringify(s.options)}
-        )
-      `;
+      const db = getPool();
+      await db.query(
+        `INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          s.id, 
+          s.title, 
+          s.description, 
+          s.status, 
+          s.createdAt, 
+          s.startDate ?? null, 
+          s.endDate ?? null, 
+          JSON.stringify(s.options)
+        ]
+      );
       res.status(201).json({ success: true, survey: s });
     } catch (error) {
       console.error('POST error:', error);
@@ -210,17 +213,26 @@ export default async function handler(req, res) {
         return;
       }
 
-      const db = getSql();
-      await db`
-        UPDATE surveys
-        SET title = ${s.title},
-            description = ${s.description},
-            status = ${s.status},
-            start_date = ${s.startDate ?? null},
-            end_date = ${s.endDate ?? null},
-            options = ${JSON.stringify(s.options)}
-        WHERE id = ${id}
-      `;
+      const db = getPool();
+      await db.query(
+        `UPDATE surveys
+         SET title = $1,
+             description = $2,
+             status = $3,
+             start_date = $4,
+             end_date = $5,
+             options = $6
+         WHERE id = $7`,
+        [
+          s.title,
+          s.description,
+          s.status,
+          s.startDate ?? null,
+          s.endDate ?? null,
+          JSON.stringify(s.options),
+          id
+        ]
+      );
       res.status(200).json({ success: true });
     } catch (error) {
       console.error('PUT error:', error);
@@ -237,8 +249,8 @@ export default async function handler(req, res) {
         res.status(400).json({ error: 'Missing survey id query parameter' });
         return;
       }
-      const db = getSql();
-      await db`DELETE FROM surveys WHERE id = ${id}`;
+      const db = getPool();
+      await db.query('DELETE FROM surveys WHERE id = $1', [id]);
       res.status(200).json({ success: true });
     } catch (error) {
       console.error('DELETE error:', error);
