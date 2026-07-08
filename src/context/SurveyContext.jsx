@@ -13,7 +13,7 @@ export const useSurveys = () => {
 export const SurveyProvider = ({ children }) => {
   const [surveys, setSurveys] = useState([]);
   const [loading, setLoading] = useState(true);
-  const syncTimeoutRef = useRef(null);
+  const hasDbRef = useRef(false);
 
   const fetchSurveys = useCallback(async () => {
     try {
@@ -22,6 +22,7 @@ export const SurveyProvider = ({ children }) => {
         const data = await res.json();
         if (data && Array.isArray(data.surveys)) {
           setSurveys(data.surveys);
+          hasDbRef.current = Boolean(data.hasPostgres);
           saveSurveys(data.surveys);
           return;
         }
@@ -37,33 +38,9 @@ export const SurveyProvider = ({ children }) => {
     fetchSurveys().finally(() => setLoading(false));
   }, [fetchSurveys]);
 
-  const persist = useCallback((updated) => {
-    // 1. Instant Optimistic UI and Local Cache Update (Snappy visual updates)
-    setSurveys(updated);
-    saveSurveys(updated);
-
-    // 2. Clear any pending debounced sync
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-    }
-
-    // 3. Batch and delay cloud database save by 600ms to reduce network congestion
-    syncTimeoutRef.current = setTimeout(async () => {
-      try {
-        await fetch('/api/surveys', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ surveys: updated }),
-        });
-      } catch (err) {
-        console.error('Failed to sync surveys to the cloud database:', err);
-      }
-    }, 600);
-  }, []);
-
   // ── Admin Actions ──────────────────────────────────────────────────────────
 
-  const createSurvey = useCallback((data) => {
+  const createSurvey = useCallback(async (data) => {
     const survey = {
       id: generateId(),
       title: data.title,
@@ -78,14 +55,38 @@ export const SurveyProvider = ({ children }) => {
         votes: 0,
       })),
     };
-    persist([...surveys, survey]);
+
+    // Optimistic Update
+    const updatedList = [...surveys, survey];
+    setSurveys(updatedList);
+    saveSurveys(updatedList);
+
+    try {
+      if (hasDbRef.current) {
+        await fetch('/api/surveys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(survey)
+        });
+      } else {
+        await fetch('/api/surveys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surveys: updatedList })
+        });
+      }
+    } catch (err) {
+      console.error('Failed to save created survey:', err);
+    }
+
     return survey;
   }, [surveys]);
 
-  const updateSurvey = useCallback((id, changes) => {
+  const updateSurvey = useCallback(async (id, changes) => {
+    let updatedSurvey = null;
     const updated = surveys.map((s) => {
       if (s.id !== id) return s;
-      const updatedSurvey = { ...s, ...changes };
+      updatedSurvey = { ...s, ...changes };
       if (changes.options) {
         updatedSurvey.options = changes.options.map((o) => {
           if (o.id) {
@@ -99,11 +100,49 @@ export const SurveyProvider = ({ children }) => {
       if ('endDate'   in changes) updatedSurvey.endDate   = changes.endDate   ?? null;
       return updatedSurvey;
     });
-    persist(updated);
+
+    setSurveys(updated);
+    saveSurveys(updated);
+
+    try {
+      if (hasDbRef.current && updatedSurvey) {
+        await fetch(`/api/surveys?id=${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedSurvey)
+        });
+      } else {
+        await fetch('/api/surveys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surveys: updated })
+        });
+      }
+    } catch (err) {
+      console.error('Failed to update survey:', err);
+    }
   }, [surveys]);
 
-  const deleteSurvey = useCallback((id) => {
-    persist(surveys.filter((s) => s.id !== id));
+  const deleteSurvey = useCallback(async (id) => {
+    const updated = surveys.filter((s) => s.id !== id);
+    setSurveys(updated);
+    saveSurveys(updated);
+
+    try {
+      if (hasDbRef.current) {
+        await fetch(`/api/surveys?id=${id}`, {
+          method: 'DELETE'
+        });
+      } else {
+        await fetch('/api/surveys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surveys: updated })
+        });
+      }
+    } catch (err) {
+      console.error('Failed to delete survey:', err);
+    }
   }, [surveys]);
 
   const publishSurvey = useCallback((id) => {
@@ -132,10 +171,10 @@ export const SurveyProvider = ({ children }) => {
       if (record.changesUsed >= MAX_VOTE_CHANGES) return { success: false, reason: 'limit' };
     }
 
-    // Update vote counts
+    let updatedSurvey = null;
     const updated = surveys.map((s) => {
       if (s.id !== surveyId) return s;
-      return {
+      updatedSurvey = {
         ...s,
         options: s.options.map((o) => {
           if (o.id === optionId) return { ...o, votes: o.votes + 1 };
@@ -143,8 +182,32 @@ export const SurveyProvider = ({ children }) => {
           return o;
         }),
       };
+      return updatedSurvey;
     });
-    persist(updated);
+
+    setSurveys(updated);
+    saveSurveys(updated);
+
+    // Save to database instantly (no debounce timeout for consistency)
+    (async () => {
+      try {
+        if (hasDbRef.current && updatedSurvey) {
+          await fetch(`/api/surveys?id=${surveyId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedSurvey)
+          });
+        } else {
+          await fetch('/api/surveys', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ surveys: updated })
+          });
+        }
+      } catch (err) {
+        console.error('Failed to save vote to cloud database:', err);
+      }
+    })();
 
     const newChangesUsed = record ? record.changesUsed + 1 : 0;
     saveVoteRecord(surveyId, { optionId, changesUsed: newChangesUsed });

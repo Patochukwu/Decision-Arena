@@ -1,10 +1,116 @@
 // api/surveys.js
-// Vercel Serverless Function to proxy requests and bypass browser CORS preflight restrictions
+// Vercel Serverless Function supporting PostgreSQL (primary) and ExtendsClass JSON Bin (fallback)
+import postgres from 'postgres';
 
 const SURVEYS_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/efcaebe';
+const HAS_POSTGRES = Boolean(process.env.DATABASE_URL);
+
+let sql;
+if (HAS_POSTGRES) {
+  sql = postgres(process.env.DATABASE_URL, {
+    ssl: 'require',
+    max: 10,
+    idle_timeout: 20,
+    connect_timeout: 10
+  });
+}
+
+// Default Seed surveys
+const DEFAULT_SURVEYS = [
+  {
+    id: "seed-survey-1",
+    title: "What major feature should we build next for Decision Arena?",
+    description: "Help us prioritize our roadmap. We want to know which integrations and capabilities matter most to you.",
+    status: "active",
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    startDate: null,
+    endDate: null,
+    options: [
+      { id: "seed-opt-1-1", label: "Real-time Database Sync (Firebase/Supabase)", votes: 42 },
+      { id: "seed-opt-1-2", label: "Social Identity Logins (Google, GitHub, Apple)", votes: 28 },
+      { id: "seed-opt-1-3", label: "Interactive charts and PDF reports export", votes: 19 },
+      { id: "seed-opt-1-4", label: "Slack & Discord notification webhooks", votes: 35 }
+    ]
+  },
+  {
+    id: "seed-survey-2",
+    title: "Where should we host the 2026 Developer Retreat?",
+    description: "Voting is open to all community members. Select your dream destination for a week of hacking and outdoor adventures.",
+    status: "active",
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    startDate: new Date().toISOString(),
+    endDate: new Date(Date.now() + 86400000 * 3).toISOString(),
+    options: [
+      { id: "seed-opt-2-1", label: "Kyoto Temple Stays & Bamboo Forests", votes: 64 },
+      { id: "seed-opt-2-2", label: "Swiss Alps Alpine Hackhouse & Skiing", votes: 88 },
+      { id: "seed-opt-2-3", label: "Cape Town Beach Villa & Wildlife Safari", votes: 47 }
+    ]
+  },
+  {
+    id: "seed-survey-3",
+    title: "What is your default IDE color theme preference?",
+    description: "Let us know what color scheme keeps you in the flow state during long coding sessions.",
+    status: "active",
+    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    startDate: null,
+    endDate: null,
+    options: [
+      { id: "seed-opt-3-1", label: "Nordic Minimal (Cold Grays & Blues)", votes: 12 },
+      { id: "seed-opt-3-2", label: "Dracula / Premium Pitch Dark", votes: 45 },
+      { id: "seed-opt-3-3", label: "Warm Editorial Light Theme (Lavender-White)", votes: 29 },
+      { id: "seed-opt-3-4", label: "Monokai Classic Retro", votes: 8 }
+    ]
+  }
+];
+
+// Helper to initialize Postgres table and seed data
+async function initDb() {
+  if (!HAS_POSTGRES) return;
+  try {
+    // 1. Create table
+    await sql`
+      CREATE TABLE IF NOT EXISTS surveys (
+        id VARCHAR(255) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        status VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        start_date TIMESTAMP WITH TIME ZONE,
+        end_date TIMESTAMP WITH TIME ZONE,
+        options JSONB NOT NULL
+      )
+    `;
+
+    // 2. Check if table is empty
+    const countResult = await sql`SELECT count(*) FROM surveys`;
+    if (parseInt(countResult[0].count) === 0) {
+      console.log("Postgres database is empty. Seeding default surveys...");
+      for (const s of DEFAULT_SURVEYS) {
+        await sql`
+          INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
+          VALUES (
+            ${s.id}, 
+            ${s.title}, 
+            ${s.description}, 
+            ${s.status}, 
+            ${s.createdAt}, 
+            ${s.startDate}, 
+            ${s.endDate}, 
+            ${JSON.stringify(s.options)}
+          )
+        `;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to initialize database:", err);
+  }
+}
+
+// Run initialization
+let dbInitialized = false;
 
 export default async function handler(req, res) {
-  // Add CORS headers for local development (localhost)
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -13,45 +119,135 @@ export default async function handler(req, res) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
+  // Ensure DB table exists
+  if (HAS_POSTGRES && !dbInitialized) {
+    await initDb();
+    dbInitialized = true;
+  }
+
+  // ── GET Request ────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     try {
-      // Enable Vercel Edge CDN Caching (1s fresh, stale for 9s while revalidating in background)
-      res.setHeader('Cache-Control', 'public, s-maxage=1, stale-while-revalidate=9');
+      // Disable Edge CDN caching for writes consistency
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
-      const response = await fetch(SURVEYS_BIN_URL);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch from backend storage: ${response.statusText}`);
+      if (HAS_POSTGRES) {
+        const rows = await sql`SELECT * FROM surveys ORDER BY created_at DESC`;
+        const surveys = rows.map(r => ({
+          id: r.id,
+          title: r.title,
+          description: r.description,
+          status: r.status,
+          createdAt: r.created_at,
+          startDate: r.start_date,
+          endDate: r.end_date,
+          options: r.options
+        }));
+        res.status(200).json({ surveys, hasPostgres: true });
+      } else {
+        // Fallback: ExtendsClass JSON storage
+        const response = await fetch(SURVEYS_BIN_URL);
+        const data = await response.json();
+        res.status(200).json({ surveys: data.surveys || [], hasPostgres: false });
       }
-      const data = await response.json();
-      res.status(200).json(data);
     } catch (error) {
-      console.error('Proxy GET error:', error);
+      console.error('GET error:', error);
       res.status(500).json({ error: error.message });
     }
     return;
   }
 
+  // ── POST Request (Create Survey) ──────────────────────────────────────────
+  if (req.method === 'POST') {
+    try {
+      const s = req.body;
+      if (HAS_POSTGRES) {
+        await sql`
+          INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
+          VALUES (
+            ${s.id}, 
+            ${s.title}, 
+            ${s.description}, 
+            ${s.status}, 
+            ${s.createdAt}, 
+            ${s.startDate ?? null}, 
+            ${s.endDate ?? null}, 
+            ${JSON.stringify(s.options)}
+          )
+        `;
+        res.status(201).json({ success: true, survey: s });
+      } else {
+        // Fallback
+        res.status(400).json({ error: 'POST method not supported on fallback storage' });
+      }
+    } catch (error) {
+      console.error('POST error:', error);
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
+  // ── PUT Request (Update Survey / Vote) ─────────────────────────────────────
   if (req.method === 'PUT') {
     try {
-      // Forward the PUT request to ExtendsClass from server-side (bypasses CORS check)
-      const response = await fetch(SURVEYS_BIN_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body)
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to save to backend storage: ${response.statusText}`);
+      const { id } = req.query;
+      const s = req.body;
+
+      if (HAS_POSTGRES) {
+        if (id) {
+          // Update specific survey
+          await sql`
+            UPDATE surveys
+            SET title = ${s.title},
+                description = ${s.description},
+                status = ${s.status},
+                start_date = ${s.startDate ?? null},
+                end_date = ${s.endDate ?? null},
+                options = ${JSON.stringify(s.options)}
+            WHERE id = ${id}
+          `;
+          res.status(200).json({ success: true });
+        } else {
+          res.status(400).json({ error: 'Missing survey id query parameter' });
+        }
+      } else {
+        // Fallback: PUT the whole list of surveys to ExtendsClass
+        const response = await fetch(SURVEYS_BIN_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body)
+        });
+        const data = await response.json();
+        res.status(200).json(data);
       }
-      const data = await response.json();
-      res.status(200).json(data);
     } catch (error) {
-      console.error('Proxy PUT error:', error);
+      console.error('PUT error:', error);
+      res.status(500).json({ error: error.message });
+    }
+    return;
+  }
+
+  // ── DELETE Request ─────────────────────────────────────────────────────────
+  if (req.method === 'DELETE') {
+    try {
+      const { id } = req.query;
+      if (HAS_POSTGRES) {
+        if (id) {
+          await sql`DELETE FROM surveys WHERE id = ${id}`;
+          res.status(200).json({ success: true });
+        } else {
+          res.status(400).json({ error: 'Missing survey id query parameter' });
+        }
+      } else {
+        res.status(400).json({ error: 'DELETE method not supported on fallback storage' });
+      }
+    } catch (error) {
+      console.error('DELETE error:', error);
       res.status(500).json({ error: error.message });
     }
     return;
