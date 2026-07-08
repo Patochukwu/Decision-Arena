@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, Trophy, Lock, CheckCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Users, Trophy, Lock, RefreshCw, Clock, CalendarClock, AlertTriangle } from 'lucide-react';
 import { useSurveys } from '../context/SurveyContext';
 import VoteOption from '../components/VoteOption';
 import Toast, { useToast } from '../components/Toast';
-import { getTotalVotes, MAX_VOTE_CHANGES } from '../utils/helpers';
+import { getTotalVotes, MAX_VOTE_CHANGES, getSurveyTimeStatus, formatCountdown, isVotingOpen } from '../utils/helpers';
 import './SurveyPage.css';
 
 const SurveyPage = () => {
@@ -14,9 +14,10 @@ const SurveyPage = () => {
   const { getSurveyById, castVote, getMyVote } = useSurveys();
   const { toasts, addToast, removeToast } = useToast();
 
-  const [survey, setSurvey] = useState(null);
-  const [myVote, setMyVote] = useState(null);
+  const [survey, setSurvey]     = useState(null);
+  const [myVote, setMyVote]     = useState(null);
   const [justVoted, setJustVoted] = useState(false);
+  const [countdown, setCountdown] = useState(null); // ms remaining
 
   useEffect(() => {
     const s = getSurveyById(id);
@@ -25,6 +26,18 @@ const SurveyPage = () => {
     setMyVote(getMyVote(id));
   }, [id]);
 
+  // Countdown timer for surveys with endDate
+  useEffect(() => {
+    if (!survey?.endDate) { setCountdown(null); return; }
+    const tick = () => {
+      const remaining = new Date(survey.endDate).getTime() - Date.now();
+      setCountdown(remaining > 0 ? remaining : 0);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [survey?.endDate]);
+
   // Re-sync after voting
   const refreshSurvey = () => {
     setSurvey(getSurveyById(id));
@@ -32,18 +45,14 @@ const SurveyPage = () => {
   };
 
   const handleVote = (optionId) => {
-    if (survey.status !== 'active') {
-      addToast('This survey is no longer accepting votes.', 'info');
-      return;
-    }
     const result = castVote(id, optionId);
 
     if (!result.success) {
-      if (result.reason === 'same') {
-        addToast('You already selected this option.', 'info');
-      } else if (result.reason === 'limit') {
-        addToast(`You've used all your vote changes. No more changes allowed.`, 'error');
-      }
+      if (result.reason === 'same')        addToast('You already selected this option.', 'info');
+      else if (result.reason === 'limit')  addToast(`You've used all your vote changes.`, 'error');
+      else if (result.reason === 'not_started') addToast('This survey hasn\'t opened yet.', 'info');
+      else if (result.reason === 'expired')     addToast('Voting for this survey has closed.', 'error');
+      else addToast('Voting is not available right now.', 'error');
       return;
     }
 
@@ -69,13 +78,14 @@ const SurveyPage = () => {
 
   if (!survey) return null;
 
-  const totalVotes = getTotalVotes(survey.options);
+  const totalVotes    = getTotalVotes(survey.options);
   const sortedOptions = [...survey.options].sort((a, b) => b.votes - a.votes);
   const leadingOption = sortedOptions[0];
-  const changesUsed = myVote?.changesUsed ?? null;
-  const changesLeft = changesUsed !== null ? MAX_VOTE_CHANGES - changesUsed : MAX_VOTE_CHANGES;
-  const voteLocked = myVote && changesLeft <= 0;
-  const canVote = survey.status === 'active' && !voteLocked;
+  const changesUsed   = myVote?.changesUsed ?? null;
+  const changesLeft   = changesUsed !== null ? MAX_VOTE_CHANGES - changesUsed : MAX_VOTE_CHANGES;
+  const voteLocked    = myVote && changesLeft <= 0;
+  const timeStatus    = getSurveyTimeStatus(survey);
+  const canVote       = isVotingOpen(survey) && !voteLocked;
 
   return (
     <div className="survey-page">
@@ -116,6 +126,36 @@ const SurveyPage = () => {
 
           <h1 className="survey-page-title">{survey.title}</h1>
           {survey.description && <p className="survey-page-desc">{survey.description}</p>}
+
+          {/* Timeframe banners */}
+          {timeStatus === 'not_started' && survey.startDate && (
+            <div className="vote-status-banner vote-not-started">
+              <CalendarClock size={15} />
+              <span>
+                Voting opens on <strong>{new Date(survey.startDate).toLocaleString()}</strong>
+              </span>
+            </div>
+          )}
+
+          {timeStatus === 'expired' && (
+            <div className="vote-status-banner vote-archived">
+              <AlertTriangle size={15} />
+              <span>
+                Voting closed{survey.endDate ? ` on ${new Date(survey.endDate).toLocaleString()}` : ''}.
+              </span>
+            </div>
+          )}
+
+          {(timeStatus === 'active' || timeStatus === 'no_limit') && survey.endDate && countdown !== null && (
+            <div className={`vote-status-banner vote-countdown ${countdown < 3600000 ? 'vote-countdown-urgent' : ''}`}>
+              <Clock size={15} />
+              <span>
+                {countdown === 0
+                  ? 'Voting just closed.'
+                  : <>Closes in <strong>{formatCountdown(countdown)}</strong></>}
+              </span>
+            </div>
+          )}
 
           {/* Vote status banner */}
           {myVote && (

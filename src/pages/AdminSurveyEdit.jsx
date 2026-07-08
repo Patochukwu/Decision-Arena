@@ -1,27 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
-import { ArrowLeft, Plus, Trash2, GripVertical, Save, Send } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, GripVertical, Save, Send, Calendar, Clock } from 'lucide-react';
 import { useSurveys } from '../context/SurveyContext';
 import Toast, { useToast } from '../components/Toast';
-import { generateId } from '../utils/helpers';
+import { generateId, isoToDatetimeLocal, datetimeLocalToIso } from '../utils/helpers';
 import './AdminSurveyEdit.css';
 
 const AdminSurveyEdit = () => {
-  const { id } = useParams(); // undefined = create mode
+  const { id } = useParams();
   const navigate = useNavigate();
-  const { surveys, createSurvey, updateSurvey, getSurveyById } = useSurveys();
+  const { createSurvey, updateSurvey, getSurveyById } = useSurveys();
   const { toasts, addToast, removeToast } = useToast();
   const isEdit = Boolean(id);
 
-  const [title, setTitle] = useState('');
+  const [title, setTitle]       = useState('');
   const [description, setDescription] = useState('');
-  const [options, setOptions] = useState([
+  const [options, setOptions]   = useState([
     { id: generateId(), label: '' },
     { id: generateId(), label: '' },
   ]);
-  const [publishNow, setPublishNow] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate,   setEndDate]   = useState('');
+  const [useTimeframe, setUseTimeframe] = useState(false);
+  const [saving, setSaving]     = useState(false);
 
   // Load existing survey for edit mode
   useEffect(() => {
@@ -31,6 +33,11 @@ const AdminSurveyEdit = () => {
       setTitle(s.title);
       setDescription(s.description || '');
       setOptions(s.options.map((o) => ({ id: o.id, label: o.label })));
+      if (s.startDate || s.endDate) {
+        setUseTimeframe(true);
+        setStartDate(isoToDatetimeLocal(s.startDate));
+        setEndDate(isoToDatetimeLocal(s.endDate));
+      }
     }
   }, [id]);
 
@@ -54,6 +61,12 @@ const AdminSurveyEdit = () => {
     if (!title.trim()) { addToast('Please enter a survey title.', 'error'); return false; }
     const filled = options.filter((o) => o.label.trim());
     if (filled.length < 2) { addToast('Please fill in at least 2 options.', 'error'); return false; }
+    if (useTimeframe && startDate && endDate) {
+      if (new Date(endDate) <= new Date(startDate)) {
+        addToast('End date must be after start date.', 'error');
+        return false;
+      }
+    }
     return true;
   };
 
@@ -64,28 +77,30 @@ const AdminSurveyEdit = () => {
     const filledOptions = options.filter((o) => o.label.trim());
     const status = publish ? 'active' : (isEdit ? getSurveyById(id)?.status : 'draft');
 
+    const payload = {
+      title:       title.trim(),
+      description: description.trim(),
+      options:     filledOptions,
+      status,
+      startDate: useTimeframe && startDate ? datetimeLocalToIso(startDate) : null,
+      endDate:   useTimeframe && endDate   ? datetimeLocalToIso(endDate)   : null,
+    };
+
     setTimeout(() => {
       if (isEdit) {
-        updateSurvey(id, {
-          title: title.trim(),
-          description: description.trim(),
-          options: filledOptions,
-          status,
-        });
+        updateSurvey(id, payload);
         addToast('Survey updated successfully!', 'success');
       } else {
-        createSurvey({
-          title: title.trim(),
-          description: description.trim(),
-          options: filledOptions.map((o) => o.label),
-          status,
-        });
+        createSurvey({ ...payload, options: filledOptions.map((o) => o.label) });
         addToast(publish ? 'Survey created and published!' : 'Survey saved as draft!', 'success');
       }
       setSaving(false);
       setTimeout(() => navigate('/admin'), 800);
     }, 350);
   };
+
+  // Min datetime for pickers = now
+  const nowLocal = isoToDatetimeLocal(new Date().toISOString());
 
   return (
     <div className="edit-page">
@@ -102,7 +117,9 @@ const AdminSurveyEdit = () => {
             {isEdit ? 'Edit Survey' : 'Create New Survey'}
           </h1>
           <p className="edit-page-sub">
-            {isEdit ? 'Update your survey details and options.' : 'Set up your survey title, description, and ideas for people to vote on.'}
+            {isEdit
+              ? 'Update your survey details, options, and timeframe.'
+              : 'Set up your survey title, description, ideas, and an optional voting window.'}
           </p>
         </div>
 
@@ -146,6 +163,98 @@ const AdminSurveyEdit = () => {
                   <span className="char-count">{description.length}/400</span>
                 </div>
               </div>
+            </div>
+
+            {/* Timeframe */}
+            <div className="edit-section card">
+              <div className="edit-section-header">
+                <h2 className="edit-section-title">
+                  <Calendar size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+                  Voting Timeframe
+                </h2>
+                <label className="toggle-label">
+                  <input
+                    type="checkbox"
+                    className="toggle-input"
+                    checked={useTimeframe}
+                    onChange={(e) => setUseTimeframe(e.target.checked)}
+                  />
+                  <span className="toggle-track">
+                    <span className="toggle-thumb" />
+                  </span>
+                  <span className="toggle-text">{useTimeframe ? 'Enabled' : 'No limit'}</span>
+                </label>
+              </div>
+
+              <AnimatePresence>
+                {useTimeframe && (
+                  <motion.div
+                    className="edit-section-body"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <p className="edit-section-hint">
+                      Set when voting opens and closes. Leave a field empty to have no limit on that end.
+                    </p>
+                    <div className="date-row">
+                      <div className="input-group">
+                        <label className="input-label" htmlFor="start-date">
+                          <Clock size={13} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                          Voting Opens
+                        </label>
+                        <input
+                          id="start-date"
+                          type="datetime-local"
+                          className="input"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label" htmlFor="end-date">
+                          <Clock size={13} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+                          Voting Closes
+                        </label>
+                        <input
+                          id="end-date"
+                          type="datetime-local"
+                          className="input"
+                          value={endDate}
+                          min={startDate || nowLocal}
+                          onChange={(e) => setEndDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Preview strip */}
+                    {(startDate || endDate) && (
+                      <div className="timeframe-preview">
+                        <Clock size={14} />
+                        <span>
+                          {startDate
+                            ? `Opens ${new Date(startDate).toLocaleString()}`
+                            : 'Open immediately'}
+                          {' → '}
+                          {endDate
+                            ? `Closes ${new Date(endDate).toLocaleString()}`
+                            : 'No closing date'}
+                        </span>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {!useTimeframe && (
+                <div className="edit-section-body">
+                  <p className="edit-section-hint">
+                    Voting will remain open as long as the survey is published. Enable the toggle to set a specific window.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Options */}
@@ -248,7 +357,7 @@ const AdminSurveyEdit = () => {
               <ul className="tips-list">
                 <li>Keep options concise and distinct</li>
                 <li>Add context in the description</li>
-                <li>You can edit options even after publishing</li>
+                <li>Set a closing date to create urgency</li>
                 <li>Votes are preserved when you edit labels</li>
               </ul>
             </div>

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getSurveys, saveSurveys, getVoteRecord, saveVoteRecord } from '../utils/storage';
-import { generateId, MAX_VOTE_CHANGES } from '../utils/helpers';
+import { generateId, MAX_VOTE_CHANGES, isVotingOpen, getSurveyTimeStatus } from '../utils/helpers';
 
 const SurveyContext = createContext(null);
 
@@ -31,6 +31,8 @@ export const SurveyProvider = ({ children }) => {
       description: data.description || '',
       status: data.status || 'draft',
       createdAt: new Date().toISOString(),
+      startDate: data.startDate || null,
+      endDate:   data.endDate   || null,
       options: (data.options || []).map((label) => ({
         id: generateId(),
         label,
@@ -44,19 +46,19 @@ export const SurveyProvider = ({ children }) => {
   const updateSurvey = useCallback((id, changes) => {
     const updated = surveys.map((s) => {
       if (s.id !== id) return s;
-      // Handle options update carefully to preserve existing vote counts
       const updatedSurvey = { ...s, ...changes };
       if (changes.options) {
         updatedSurvey.options = changes.options.map((o) => {
           if (o.id) {
-            // existing option — preserve votes
             const existing = s.options.find((x) => x.id === o.id);
             return { ...o, votes: existing ? existing.votes : 0 };
           }
-          // new option
           return { id: generateId(), label: o.label, votes: 0 };
         });
       }
+      // Preserve null explicitly for date fields
+      if ('startDate' in changes) updatedSurvey.startDate = changes.startDate ?? null;
+      if ('endDate'   in changes) updatedSurvey.endDate   = changes.endDate   ?? null;
       return updatedSurvey;
     });
     persist(updated);
@@ -77,17 +79,19 @@ export const SurveyProvider = ({ children }) => {
   // ── User Voting ────────────────────────────────────────────────────────────
 
   const castVote = useCallback((surveyId, optionId) => {
-    const record = getVoteRecord(surveyId);
-    // { optionId, changesUsed }
+    const survey = surveys.find((s) => s.id === surveyId);
+    if (!survey) return { success: false, reason: 'not_found' };
 
+    // Timeframe gate
+    if (!isVotingOpen(survey)) {
+      const ts = getSurveyTimeStatus(survey);
+      return { success: false, reason: ts === 'not_started' ? 'not_started' : 'expired' };
+    }
+
+    const record = getVoteRecord(surveyId);
     if (record) {
-      if (record.optionId === optionId) {
-        // voting same option — no-op
-        return { success: false, reason: 'same' };
-      }
-      if (record.changesUsed >= MAX_VOTE_CHANGES) {
-        return { success: false, reason: 'limit' };
-      }
+      if (record.optionId === optionId) return { success: false, reason: 'same' };
+      if (record.changesUsed >= MAX_VOTE_CHANGES) return { success: false, reason: 'limit' };
     }
 
     // Update vote counts

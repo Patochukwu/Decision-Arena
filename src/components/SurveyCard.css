@@ -80,6 +80,21 @@
   border-color: rgba(245,158,11,0.2);
   color: var(--amber);
 }
+.stat-chip-expired {
+  background: rgba(185, 28, 28, 0.08);
+  border-color: rgba(185, 28, 28, 0.18);
+  color: var(--red);
+}
+.stat-chip-pending {
+  background: rgba(180, 83, 9, 0.08);
+  border-color: rgba(180, 83, 9, 0.18);
+  color: var(--amber);
+}
+.stat-chip-deadline {
+  background: rgba(79, 70, 229, 0.07);
+  border-color: rgba(79, 70, 229, 0.15);
+  color: var(--indigo);
+}
 
 /* Actions */
 .survey-card-actions {

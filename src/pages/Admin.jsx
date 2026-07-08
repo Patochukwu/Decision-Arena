@@ -9,7 +9,7 @@ import {
 import { useSurveys } from '../context/SurveyContext';
 import Modal from '../components/Modal';
 import Toast, { useToast } from '../components/Toast';
-import { getTotalVotes, getTimeAgo } from '../utils/helpers';
+import { getTotalVotes, getTimeAgo, getSurveyTimeStatus } from '../utils/helpers';
 import './Admin.css';
 
 const TABS = ['all', 'active', 'draft', 'archived'];
@@ -194,6 +194,18 @@ const Admin = () => {
                           <>
                             <span className="dot" />
                             <span>🏆 {leading.label} ({Math.round((leading.votes / total) * 100)}%)</span>
+                          </>
+                        )}
+                        {s.endDate && (
+                          <>
+                            <span className="dot" />
+                            <span className={`time-status-indicator indicator-${getSurveyTimeStatus(s)}`}>
+                              {getSurveyTimeStatus(s) === 'expired'
+                                ? '🔴 Closed'
+                                : getSurveyTimeStatus(s) === 'not_started'
+                                ? `🟡 Opens ${new Date(s.startDate).toLocaleDateString()}`
+                                : `🟢 Closes ${new Date(s.endDate).toLocaleDateString()}`}
+                            </span>
                           </>
                         )}
                       </div>

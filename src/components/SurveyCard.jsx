@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Users, BarChart2, Clock } from 'lucide-react';
-import { getTotalVotes, getTimeAgo } from '../utils/helpers';
+import { getTotalVotes, getTimeAgo, getSurveyTimeStatus } from '../utils/helpers';
 import './SurveyCard.css';
 
 const gradients = [
@@ -61,6 +61,21 @@ const SurveyCard = ({ survey, index = 0, adminMode = false, onEdit, onDelete, on
           {topOption && totalVotes > 0 && (
             <div className="stat-chip stat-chip-lead">
               <span>🏆 {topOption.label}</span>
+            </div>
+          )}
+          {survey.endDate && (
+            <div className={`stat-chip ${
+              getSurveyTimeStatus(survey) === 'expired' ? 'stat-chip-expired' :
+              getSurveyTimeStatus(survey) === 'not_started' ? 'stat-chip-pending' : 'stat-chip-deadline'
+            }`}>
+              <Clock size={11} />
+              <span>
+                {getSurveyTimeStatus(survey) === 'expired'
+                  ? 'Closed'
+                  : getSurveyTimeStatus(survey) === 'not_started'
+                  ? `Opens ${new Date(survey.startDate).toLocaleDateString()}`
+                  : `Closes ${new Date(survey.endDate).toLocaleDateString()}`}
+              </span>
             </div>
           )}
         </div>
