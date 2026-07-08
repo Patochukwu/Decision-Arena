@@ -99,10 +99,6 @@ const AdminLogin = () => {
           </button>
         </form>
 
-        <div className="login-hint">
-          Default password: <code>admin123</code>
-        </div>
-
         <Link to="/" className="login-back">← Back to surveys</Link>
       </motion.div>
     </div>

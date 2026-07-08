@@ -4,6 +4,11 @@ import { generateId, MAX_VOTE_CHANGES, isVotingOpen, getSurveyTimeStatus } from 
 
 const SurveyContext = createContext(null);
 
+const isLocalHost = () => {
+  return typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+};
+
 export const useSurveys = () => {
   const ctx = useContext(SurveyContext);
   if (!ctx) throw new Error('useSurveys must be used within SurveyProvider');
@@ -30,8 +35,14 @@ export const SurveyProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to fetch surveys from Vercel API:', err);
     }
-    // Fallback to local storage (e.g., local development mode)
-    setSurveys(getSurveys());
+
+    if (isLocalHost()) {
+      console.warn("Vercel Serverless Function not found. Running in local fallback mode (using localStorage).");
+      setSurveys(getSurveys());
+    } else {
+      console.error("Database connection failed. PostgreSQL is not connected or configured.");
+      setSurveys([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -63,17 +74,14 @@ export const SurveyProvider = ({ children }) => {
 
     try {
       if (hasDbRef.current) {
-        await fetch('/api/surveys', {
+        const res = await fetch('/api/surveys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(survey)
         });
-      } else {
-        await fetch('/api/surveys', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ surveys: updatedList })
-        });
+        if (!res.ok) throw new Error('Postgres save failed');
+      } else if (!isLocalHost()) {
+        throw new Error('Database is offline');
       }
     } catch (err) {
       console.error('Failed to save created survey:', err);
@@ -106,17 +114,14 @@ export const SurveyProvider = ({ children }) => {
 
     try {
       if (hasDbRef.current && updatedSurvey) {
-        await fetch(`/api/surveys?id=${id}`, {
+        const res = await fetch(`/api/surveys?id=${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedSurvey)
         });
-      } else {
-        await fetch('/api/surveys', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ surveys: updated })
-        });
+        if (!res.ok) throw new Error('Postgres update failed');
+      } else if (!isLocalHost()) {
+        throw new Error('Database is offline');
       }
     } catch (err) {
       console.error('Failed to update survey:', err);
@@ -130,15 +135,12 @@ export const SurveyProvider = ({ children }) => {
 
     try {
       if (hasDbRef.current) {
-        await fetch(`/api/surveys?id=${id}`, {
+        const res = await fetch(`/api/surveys?id=${id}`, {
           method: 'DELETE'
         });
-      } else {
-        await fetch('/api/surveys', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ surveys: updated })
-        });
+        if (!res.ok) throw new Error('Postgres delete failed');
+      } else if (!isLocalHost()) {
+        throw new Error('Database is offline');
       }
     } catch (err) {
       console.error('Failed to delete survey:', err);
@@ -188,21 +190,18 @@ export const SurveyProvider = ({ children }) => {
     setSurveys(updated);
     saveSurveys(updated);
 
-    // Save to database instantly (no debounce timeout for consistency)
+    // Save to database instantly
     (async () => {
       try {
         if (hasDbRef.current && updatedSurvey) {
-          await fetch(`/api/surveys?id=${surveyId}`, {
+          const res = await fetch(`/api/surveys?id=${surveyId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedSurvey)
           });
-        } else {
-          await fetch('/api/surveys', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ surveys: updated })
-          });
+          if (!res.ok) throw new Error('Postgres vote sync failed');
+        } else if (!isLocalHost()) {
+          throw new Error('Database is offline');
         }
       } catch (err) {
         console.error('Failed to save vote to cloud database:', err);

@@ -1,8 +1,7 @@
 // api/surveys.js
-// Vercel Serverless Function supporting PostgreSQL (primary) and ExtendsClass JSON Bin (fallback)
+// Vercel Serverless Function - PostgreSQL only
 import postgres from 'postgres';
 
-const SURVEYS_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/efcaebe';
 const HAS_POSTGRES = Boolean(process.env.DATABASE_URL);
 
 let sql;
@@ -65,7 +64,6 @@ const DEFAULT_SURVEYS = [
 
 // Helper to initialize Postgres table and seed data
 async function initDb() {
-  if (!HAS_POSTGRES) return;
   try {
     // 1. Create table
     await sql`
@@ -103,6 +101,7 @@ async function initDb() {
     }
   } catch (err) {
     console.error("Failed to initialize database:", err);
+    throw err;
   }
 }
 
@@ -124,37 +123,42 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Database Connection Gate
+  if (!HAS_POSTGRES) {
+    res.status(500).json({ 
+      error: 'Database configuration missing. Please link a Postgres database (DATABASE_URL environment variable) in your Vercel project dashboard.' 
+    });
+    return;
+  }
+
   // Ensure DB table exists
-  if (HAS_POSTGRES && !dbInitialized) {
-    await initDb();
-    dbInitialized = true;
+  if (!dbInitialized) {
+    try {
+      await initDb();
+      dbInitialized = true;
+    } catch (e) {
+      res.status(500).json({ error: 'Database connection failed: ' + e.message });
+      return;
+    }
   }
 
   // ── GET Request ────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     try {
-      // Disable Edge CDN caching for writes consistency
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
-      if (HAS_POSTGRES) {
-        const rows = await sql`SELECT * FROM surveys ORDER BY created_at DESC`;
-        const surveys = rows.map(r => ({
-          id: r.id,
-          title: r.title,
-          description: r.description,
-          status: r.status,
-          createdAt: r.created_at,
-          startDate: r.start_date,
-          endDate: r.end_date,
-          options: r.options
-        }));
-        res.status(200).json({ surveys, hasPostgres: true });
-      } else {
-        // Fallback: ExtendsClass JSON storage
-        const response = await fetch(SURVEYS_BIN_URL);
-        const data = await response.json();
-        res.status(200).json({ surveys: data.surveys || [], hasPostgres: false });
-      }
+      const rows = await sql`SELECT * FROM surveys ORDER BY created_at DESC`;
+      const surveys = rows.map(r => ({
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        status: r.status,
+        createdAt: r.created_at,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        options: r.options
+      }));
+      res.status(200).json({ surveys, hasPostgres: true });
     } catch (error) {
       console.error('GET error:', error);
       res.status(500).json({ error: error.message });
@@ -166,25 +170,20 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const s = req.body;
-      if (HAS_POSTGRES) {
-        await sql`
-          INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
-          VALUES (
-            ${s.id}, 
-            ${s.title}, 
-            ${s.description}, 
-            ${s.status}, 
-            ${s.createdAt}, 
-            ${s.startDate ?? null}, 
-            ${s.endDate ?? null}, 
-            ${JSON.stringify(s.options)}
-          )
-        `;
-        res.status(201).json({ success: true, survey: s });
-      } else {
-        // Fallback
-        res.status(400).json({ error: 'POST method not supported on fallback storage' });
-      }
+      await sql`
+        INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
+        VALUES (
+          ${s.id}, 
+          ${s.title}, 
+          ${s.description}, 
+          ${s.status}, 
+          ${s.createdAt}, 
+          ${s.startDate ?? null}, 
+          ${s.endDate ?? null}, 
+          ${JSON.stringify(s.options)}
+        )
+      `;
+      res.status(201).json({ success: true, survey: s });
     } catch (error) {
       console.error('POST error:', error);
       res.status(500).json({ error: error.message });
@@ -198,33 +197,22 @@ export default async function handler(req, res) {
       const { id } = req.query;
       const s = req.body;
 
-      if (HAS_POSTGRES) {
-        if (id) {
-          // Update specific survey
-          await sql`
-            UPDATE surveys
-            SET title = ${s.title},
-                description = ${s.description},
-                status = ${s.status},
-                start_date = ${s.startDate ?? null},
-                end_date = ${s.endDate ?? null},
-                options = ${JSON.stringify(s.options)}
-            WHERE id = ${id}
-          `;
-          res.status(200).json({ success: true });
-        } else {
-          res.status(400).json({ error: 'Missing survey id query parameter' });
-        }
-      } else {
-        // Fallback: PUT the whole list of surveys to ExtendsClass
-        const response = await fetch(SURVEYS_BIN_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(req.body)
-        });
-        const data = await response.json();
-        res.status(200).json(data);
+      if (!id) {
+        res.status(400).json({ error: 'Missing survey id query parameter' });
+        return;
       }
+
+      await sql`
+        UPDATE surveys
+        SET title = ${s.title},
+            description = ${s.description},
+            status = ${s.status},
+            start_date = ${s.startDate ?? null},
+            end_date = ${s.endDate ?? null},
+            options = ${JSON.stringify(s.options)}
+        WHERE id = ${id}
+      `;
+      res.status(200).json({ success: true });
     } catch (error) {
       console.error('PUT error:', error);
       res.status(500).json({ error: error.message });
@@ -236,16 +224,12 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     try {
       const { id } = req.query;
-      if (HAS_POSTGRES) {
-        if (id) {
-          await sql`DELETE FROM surveys WHERE id = ${id}`;
-          res.status(200).json({ success: true });
-        } else {
-          res.status(400).json({ error: 'Missing survey id query parameter' });
-        }
-      } else {
-        res.status(400).json({ error: 'DELETE method not supported on fallback storage' });
+      if (!id) {
+        res.status(400).json({ error: 'Missing survey id query parameter' });
+        return;
       }
+      await sql`DELETE FROM surveys WHERE id = ${id}`;
+      res.status(200).json({ success: true });
     } catch (error) {
       console.error('DELETE error:', error);
       res.status(500).json({ error: error.message });
