@@ -1,24 +1,19 @@
 // api/surveys.js
-// Vercel Serverless Function - PostgreSQL (Standard pg client)
-import pg from 'pg';
+// Vercel Serverless Function - PostgreSQL via Neon Serverless Driver
+import { neon } from '@neondatabase/serverless';
 
-const { Pool } = pg;
 const HAS_POSTGRES = Boolean(process.env.DATABASE_URL);
 
-let pool = null;
-function getPool() {
-  if (!pool) {
+let sql = null;
+function getSql() {
+  if (!sql) {
     if (!process.env.DATABASE_URL) {
       throw new Error('DATABASE_URL environment variable is missing.');
     }
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    });
+    // Create connection client using Neon's optimized serverless HTTP driver
+    sql = neon(process.env.DATABASE_URL);
   }
-  return pool;
+  return sql;
 }
 
 // Default Seed surveys
@@ -72,9 +67,9 @@ const DEFAULT_SURVEYS = [
 // Helper to initialize Postgres table and seed data
 async function initDb() {
   try {
-    const db = getPool();
+    const db = getSql();
     // 1. Create table
-    await db.query(`
+    await db(`
       CREATE TABLE IF NOT EXISTS surveys (
         id VARCHAR(255) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
@@ -88,11 +83,11 @@ async function initDb() {
     `);
 
     // 2. Check if table is empty
-    const countResult = await db.query('SELECT count(*) FROM surveys');
-    if (parseInt(countResult.rows[0].count) === 0) {
+    const countResult = await db('SELECT count(*) FROM surveys');
+    if (parseInt(countResult[0].count) === 0) {
       console.log("Postgres database is empty. Seeding default surveys...");
       for (const s of DEFAULT_SURVEYS) {
-        await db.query(
+        await db(
           `INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [
@@ -155,9 +150,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      const db = getPool();
-      const result = await db.query('SELECT * FROM surveys ORDER BY created_at DESC');
-      const surveys = result.rows.map(r => ({
+      const db = getSql();
+      const rows = await db('SELECT * FROM surveys ORDER BY created_at DESC');
+      const surveys = rows.map(r => ({
         id: r.id,
         title: r.title,
         description: r.description,
@@ -179,8 +174,8 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const s = req.body;
-      const db = getPool();
-      await db.query(
+      const db = getSql();
+      await db(
         `INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
@@ -213,8 +208,8 @@ export default async function handler(req, res) {
         return;
       }
 
-      const db = getPool();
-      await db.query(
+      const db = getSql();
+      await db(
         `UPDATE surveys
          SET title = $1,
              description = $2,
@@ -249,8 +244,8 @@ export default async function handler(req, res) {
         res.status(400).json({ error: 'Missing survey id query parameter' });
         return;
       }
-      const db = getPool();
-      await db.query('DELETE FROM surveys WHERE id = $1', [id]);
+      const db = getSql();
+      await db('DELETE FROM surveys WHERE id = $1', [id]);
       res.status(200).json({ success: true });
     } catch (error) {
       console.error('DELETE error:', error);
