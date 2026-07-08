@@ -1,6 +1,7 @@
 export const MAX_VOTE_CHANGES = 2;
 
 export const getTotalVotes = (options) => {
+  if (!options || !Array.isArray(options)) return 0;
   return options.reduce((sum, o) => sum + (o.votes || 0), 0);
 };
 

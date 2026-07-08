@@ -24,8 +24,9 @@ const Admin = () => {
   const [search, setSearch] = useState('');
 
   const filtered = surveys.filter((s) => {
+    if (!s) return false;
     const matchTab = tab === 'all' || s.status === tab;
-    const matchSearch = s.title.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = (s.title || '').toLowerCase().includes(search.toLowerCase());
     return matchTab && matchSearch;
   });
 

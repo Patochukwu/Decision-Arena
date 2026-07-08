@@ -22,9 +22,10 @@ const Home = () => {
   };
 
   const filtered = surveys.filter((s) => {
+    if (!s) return false;
     const matchTab  = tab === 'all' || s.status === tab;
-    const matchText = s.title.toLowerCase().includes(search.toLowerCase()) ||
-                      s.description.toLowerCase().includes(search.toLowerCase());
+    const matchText = (s.title || '').toLowerCase().includes(search.toLowerCase()) ||
+                      (s.description || '').toLowerCase().includes(search.toLowerCase());
     return matchTab && matchText && s.status !== 'draft';
   });
 
