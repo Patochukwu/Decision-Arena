@@ -1,17 +1,23 @@
 // api/surveys.js
-// Vercel Serverless Function - PostgreSQL only
+// Vercel Serverless Function - PostgreSQL (Lazy Initialization)
 import postgres from 'postgres';
 
 const HAS_POSTGRES = Boolean(process.env.DATABASE_URL);
 
-let sql;
-if (HAS_POSTGRES) {
-  sql = postgres(process.env.DATABASE_URL, {
-    ssl: 'require',
-    max: 10,
-    idle_timeout: 20,
-    connect_timeout: 10
-  });
+let sql = null;
+function getSql() {
+  if (!sql) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is missing.');
+    }
+    sql = postgres(process.env.DATABASE_URL, {
+      ssl: 'require',
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10
+    });
+  }
+  return sql;
 }
 
 // Default Seed surveys
@@ -65,8 +71,9 @@ const DEFAULT_SURVEYS = [
 // Helper to initialize Postgres table and seed data
 async function initDb() {
   try {
+    const db = getSql();
     // 1. Create table
-    await sql`
+    await db`
       CREATE TABLE IF NOT EXISTS surveys (
         id VARCHAR(255) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
@@ -80,11 +87,11 @@ async function initDb() {
     `;
 
     // 2. Check if table is empty
-    const countResult = await sql`SELECT count(*) FROM surveys`;
+    const countResult = await db`SELECT count(*) FROM surveys`;
     if (parseInt(countResult[0].count) === 0) {
       console.log("Postgres database is empty. Seeding default surveys...");
       for (const s of DEFAULT_SURVEYS) {
-        await sql`
+        await db`
           INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
           VALUES (
             ${s.id}, 
@@ -146,8 +153,8 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-
-      const rows = await sql`SELECT * FROM surveys ORDER BY created_at DESC`;
+      const db = getSql();
+      const rows = await db`SELECT * FROM surveys ORDER BY created_at DESC`;
       const surveys = rows.map(r => ({
         id: r.id,
         title: r.title,
@@ -170,7 +177,8 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const s = req.body;
-      await sql`
+      const db = getSql();
+      await db`
         INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date, options)
         VALUES (
           ${s.id}, 
@@ -202,7 +210,8 @@ export default async function handler(req, res) {
         return;
       }
 
-      await sql`
+      const db = getSql();
+      await db`
         UPDATE surveys
         SET title = ${s.title},
             description = ${s.description},
@@ -228,7 +237,8 @@ export default async function handler(req, res) {
         res.status(400).json({ error: 'Missing survey id query parameter' });
         return;
       }
-      await sql`DELETE FROM surveys WHERE id = ${id}`;
+      const db = getSql();
+      await db`DELETE FROM surveys WHERE id = ${id}`;
       res.status(200).json({ success: true });
     } catch (error) {
       console.error('DELETE error:', error);
