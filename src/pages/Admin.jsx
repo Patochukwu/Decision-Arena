@@ -16,7 +16,7 @@ const TABS = ['all', 'active', 'draft', 'archived'];
 
 const Admin = () => {
   const navigate = useNavigate();
-  const { surveys, deleteSurvey, publishSurvey, archiveSurvey } = useSurveys();
+  const { surveys, loading, deleteSurvey, publishSurvey, archiveSurvey } = useSurveys();
   const { toasts, addToast, removeToast } = useToast();
 
   const [tab, setTab] = useState('all');
@@ -160,7 +160,12 @@ const Admin = () => {
         </div>
 
         {/* Survey list */}
-        {filtered.length > 0 ? (
+        {loading ? (
+          <div className="empty-state" style={{ padding: '60px 0' }}>
+            <div className="spinner" style={{ width: '36px', height: '36px', margin: '0 auto 12px' }} />
+            <p>Loading dashboard data from database...</p>
+          </div>
+        ) : filtered.length > 0 ? (
           <div className="admin-survey-list">
             <AnimatePresence>
               {filtered.map((s, i) => {

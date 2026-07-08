@@ -11,7 +11,7 @@ import './SurveyPage.css';
 const SurveyPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getSurveyById, castVote, getMyVote } = useSurveys();
+  const { getSurveyById, castVote, getMyVote, loading } = useSurveys();
   const { toasts, addToast, removeToast } = useToast();
 
   const [survey, setSurvey]     = useState(null);
@@ -20,11 +20,12 @@ const SurveyPage = () => {
   const [countdown, setCountdown] = useState(null); // ms remaining
 
   useEffect(() => {
+    if (loading) return;
     const s = getSurveyById(id);
     if (!s) { navigate('/'); return; }
     setSurvey(s);
     setMyVote(getMyVote(id));
-  }, [id]);
+  }, [id, loading, getSurveyById]);
 
   // Countdown timer for surveys with endDate
   useEffect(() => {
@@ -76,7 +77,16 @@ const SurveyPage = () => {
     }
   }, [justVoted]);
 
-  if (!survey) return null;
+  if (loading || !survey) {
+    return (
+      <div className="survey-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ width: '40px', height: '40px', margin: '0 auto 16px' }} />
+          <p style={{ color: 'var(--text-secondary)' }}>Connecting to Decision Arena database...</p>
+        </div>
+      </div>
+    );
+  }
 
   const totalVotes    = getTotalVotes(survey.options);
   const sortedOptions = [...survey.options].sort((a, b) => b.votes - a.votes);

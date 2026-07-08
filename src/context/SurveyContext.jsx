@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getSurveys, saveSurveys, getVoteRecord, saveVoteRecord } from '../utils/storage';
 import { generateId, MAX_VOTE_CHANGES, isVotingOpen, getSurveyTimeStatus } from '../utils/helpers';
 
+const SURVEYS_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/efcaebe';
 const SurveyContext = createContext(null);
 
 export const useSurveys = () => {
@@ -12,14 +13,44 @@ export const useSurveys = () => {
 
 export const SurveyProvider = ({ children }) => {
   const [surveys, setSurveys] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchSurveys = useCallback(async () => {
+    try {
+      const res = await fetch(SURVEYS_BIN_URL);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.surveys)) {
+          setSurveys(data.surveys);
+          saveSurveys(data.surveys);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch cloud surveys:', err);
+    }
+    // Fallback to local storage
     setSurveys(getSurveys());
   }, []);
 
-  const persist = (updated) => {
+  useEffect(() => {
+    fetchSurveys().finally(() => setLoading(false));
+  }, [fetchSurveys]);
+
+  const persist = async (updated) => {
+    // Optimistic UI updates
     setSurveys(updated);
     saveSurveys(updated);
+
+    try {
+      await fetch(SURVEYS_BIN_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surveys: updated }),
+      });
+    } catch (err) {
+      console.error('Failed to sync surveys to the cloud database:', err);
+    }
   };
 
   // ── Admin Actions ──────────────────────────────────────────────────────────
@@ -56,7 +87,6 @@ export const SurveyProvider = ({ children }) => {
           return { id: generateId(), label: o.label, votes: 0 };
         });
       }
-      // Preserve null explicitly for date fields
       if ('startDate' in changes) updatedSurvey.startDate = changes.startDate ?? null;
       if ('endDate'   in changes) updatedSurvey.endDate   = changes.endDate   ?? null;
       return updatedSurvey;
@@ -130,6 +160,8 @@ export const SurveyProvider = ({ children }) => {
     <SurveyContext.Provider
       value={{
         surveys,
+        loading,
+        refreshSurveys: fetchSurveys,
         createSurvey,
         updateSurvey,
         deleteSurvey,

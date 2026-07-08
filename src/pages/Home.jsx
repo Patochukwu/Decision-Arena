@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Zap, TrendingUp, Users, BarChart3, ArrowRight } from 'lucide-react';
+import { Search, Zap, TrendingUp, Users, BarChart3, ArrowRight, RefreshCw } from 'lucide-react';
 import { useSurveys } from '../context/SurveyContext';
 import SurveyCard from '../components/SurveyCard';
 import { getTotalVotes } from '../utils/helpers';
@@ -10,9 +10,16 @@ import './Home.css';
 const TABS = ['all', 'active', 'archived'];
 
 const Home = () => {
-  const { surveys } = useSurveys();
+  const { surveys, loading, refreshSurveys } = useSurveys();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshSurveys();
+    setRefreshing(false);
+  };
 
   const filtered = surveys.filter((s) => {
     const matchTab  = tab === 'all' || s.status === tab;
@@ -113,10 +120,24 @@ const Home = () => {
                 </button>
               ))}
             </div>
+            <button 
+              className="btn btn-secondary btn-icon"
+              onClick={handleRefresh}
+              title="Refresh surveys list"
+              disabled={refreshing || loading}
+              style={{ padding: '10px' }}
+            >
+              <RefreshCw size={15} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            </button>
           </div>
 
           {/* Grid */}
-          {filtered.length > 0 ? (
+          {loading ? (
+            <div className="empty-state" style={{ padding: '60px 0' }}>
+              <div className="spinner" style={{ width: '36px', height: '36px', margin: '0 auto 12px' }} />
+              <p>Connecting to Decision Arena database...</p>
+            </div>
+          ) : filtered.length > 0 ? (
             <div className="surveys-grid">
               {filtered.map((s, i) => (
                 <SurveyCard key={s.id} survey={s} index={i} />
