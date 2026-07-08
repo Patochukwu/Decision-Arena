@@ -1,0 +1,118 @@
+.vote-option {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color var(--dur-med) var(--ease), transform var(--dur-fast) var(--ease);
+  background: var(--bg-card);
+  min-height: 64px;
+}
+
+.vote-option[style*="pointer"] {
+  cursor: pointer;
+}
+.vote-option[style*="pointer"]:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.vote-option-selected {
+  border-color: rgba(99,102,241,0.5) !important;
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.2), inset 0 0 0 1px rgba(99,102,241,0.1);
+}
+
+.vote-option-leading {
+  border-color: rgba(245,158,11,0.3) !important;
+}
+
+/* Progress bar fill */
+.vote-bar-fill {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  border-radius: var(--r-lg);
+  opacity: 0.13;
+  pointer-events: none;
+  min-width: 4px;
+}
+.vote-option-selected .vote-bar-fill { opacity: 0.18; }
+
+/* Content */
+.vote-option-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  gap: 12px;
+}
+
+.vote-option-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Radio */
+.vote-radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--dur-med) var(--ease);
+  color: var(--indigo);
+}
+.vote-radio-selected {
+  border-color: var(--indigo);
+  color: var(--indigo);
+}
+.vote-radio-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.vote-option-label {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.leading-tag {
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: rgba(245,158,11,0.15);
+  color: var(--amber);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Right */
+.vote-option-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.vote-pct {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vote-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: right;
+}

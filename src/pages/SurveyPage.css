@@ -1,0 +1,147 @@
+.survey-page {
+  min-height: calc(100vh - 64px);
+  padding: 40px 24px 80px;
+}
+
+.survey-page-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Back */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  transition: color var(--dur-fast) var(--ease);
+}
+.back-link:hover { color: var(--text-primary); }
+
+/* Header card */
+.survey-header { padding: 28px 28px 24px; display: flex; flex-direction: column; gap: 14px; }
+
+.survey-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.survey-header-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.survey-page-title {
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.survey-page-desc {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Vote status banner */
+.vote-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: var(--r-md);
+  font-size: 0.84rem;
+  color: var(--indigo);
+}
+.vote-locked {
+  background: rgba(239,68,68,0.08);
+  border-color: rgba(239,68,68,0.2);
+  color: var(--red);
+}
+.vote-archived {
+  background: rgba(148,163,184,0.08);
+  border-color: rgba(148,163,184,0.15);
+  color: var(--text-muted);
+}
+
+/* Options */
+.survey-options { display: flex; flex-direction: column; gap: 12px; }
+
+.options-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.options-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* Leading card */
+.leading-card { padding: 20px 22px; }
+
+.leading-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.trophy-icon { color: var(--amber); flex-shrink: 0; }
+
+.leading-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.leading-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 2px;
+}
+
+.leading-votes {
+  margin-left: auto;
+  text-align: right;
+}
+
+.leading-pct {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  background: var(--grad-warm);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.leading-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+  .survey-page { padding: 24px 16px 60px; }
+  .survey-header { padding: 20px 18px; }
+}

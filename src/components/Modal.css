@@ -1,0 +1,32 @@
+.modal-panel {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.modal-close:hover { color: var(--text-primary); }
+
+.modal-body {
+  padding: 24px 28px 28px;
+}

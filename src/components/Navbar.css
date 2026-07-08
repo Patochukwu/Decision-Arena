@@ -1,0 +1,109 @@
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(244, 242, 255, 0.90);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.10);
+  box-shadow: 0 1px 12px rgba(79, 70, 229, 0.07);
+}
+
+.navbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Logo */
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--grad-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+}
+
+.logo-text {
+  font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  font-weight: 800;
+  font-size: 1.12rem;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+}
+.logo-accent { color: var(--indigo); }
+
+/* Links */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.nav-link {
+  padding: 6px 14px;
+  border-radius: var(--r-full);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all var(--dur-fast) var(--ease);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.nav-link:hover { color: var(--text-primary); background: rgba(79,70,229,0.07); }
+.nav-link-active { color: var(--indigo); background: rgba(79,70,229,0.08); font-weight: 700; }
+
+/* Actions */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Mobile */
+.mobile-menu-btn { display: none; }
+
+.mobile-menu {
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.mobile-link {
+  display: block;
+  padding: 14px 24px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color var(--dur-fast) var(--ease);
+}
+.mobile-link:hover { color: var(--text-primary); }
+.mobile-link-danger { color: var(--red); }
+
+@media (max-width: 640px) {
+  .mobile-menu-btn { display: flex; }
+  .navbar-links,
+  .navbar-actions > a,
+  .navbar-actions > button:not(.mobile-menu-btn) { display: none; }
+}
