@@ -75,12 +75,12 @@
 
 .option-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 8px 10px;
+  padding: 10px 10px;
   cursor: grab;
   transition: border-color var(--dur-fast) var(--ease);
 }
@@ -92,6 +92,7 @@
   display: flex;
   flex-shrink: 0;
   cursor: grab;
+  margin-top: 10px;
 }
 
 .option-index {
@@ -107,19 +108,25 @@
   font-weight: 700;
   color: var(--text-muted);
   flex-shrink: 0;
+  margin-top: 8px;
 }
 
 .option-input {
   flex: 1;
   background: transparent;
   border-color: transparent;
-  padding: 6px 10px;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 38px;
+  line-height: 1.4;
+  font-family: inherit;
 }
 .option-input:focus { border-color: var(--indigo); background: var(--bg-elevated); }
 
 .option-remove {
   color: var(--text-muted);
   flex-shrink: 0;
+  margin-top: 5px;
 }
 .option-remove:hover { color: var(--red); background: rgba(239,68,68,0.1); }
 

@@ -49,7 +49,7 @@
 
 .vote-option-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   flex: 1;
   min-width: 0;
@@ -67,6 +67,7 @@
   flex-shrink: 0;
   transition: all var(--dur-med) var(--ease);
   color: var(--indigo);
+  margin-top: 1px;
 }
 .vote-radio-selected {
   border-color: var(--indigo);
@@ -94,6 +95,7 @@
   font-size: 0.7rem;
   font-weight: 600;
   white-space: nowrap;
+  margin-top: 2px;
 }
 
 /* Right */

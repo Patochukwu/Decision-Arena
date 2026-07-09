@@ -289,12 +289,13 @@ const AdminSurveyEdit = () => {
                           <GripVertical size={16} />
                         </div>
                         <span className="option-index">{i + 1}</span>
-                        <input
+                        <textarea
                           className="input option-input"
                           placeholder={`Option ${i + 1} — e.g. AI-powered dashboard`}
                           value={opt.label}
                           onChange={(e) => updateOptionLabel(opt.id, e.target.value)}
-                          maxLength={120}
+                          maxLength={500}
+                          rows={1}
                         />
                         <button
                           className="btn btn-ghost btn-icon option-remove"
