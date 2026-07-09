@@ -43,6 +43,17 @@ async function ensureTables() {
     )
   `;
 
+  // Migration: migrate legacy text column to label column and drop text
+  try {
+    await db`ALTER TABLE options ADD COLUMN IF NOT EXISTS label TEXT`;
+  } catch (_) {}
+  try {
+    await db`UPDATE options SET label = text WHERE label IS NULL AND text IS NOT NULL`;
+  } catch (_) {}
+  try {
+    await db`ALTER TABLE options DROP COLUMN IF EXISTS text`;
+  } catch (_) {}
+
   // Seeding: check if options table is empty
   const optionsCount = await db`SELECT count(*) FROM options`;
   if (parseInt(optionsCount[0].count) === 0) {
