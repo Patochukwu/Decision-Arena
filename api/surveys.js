@@ -24,6 +24,14 @@ async function ensureTables() {
       end_date    TIMESTAMPTZ
     )
   `;
+
+  // Drop the legacy options JSONB column from surveys if it exists
+  try {
+    await db`ALTER TABLE surveys DROP COLUMN IF EXISTS options`;
+  } catch (err) {
+    console.log("No legacy options column to drop, proceeding.");
+  }
+
   // options table — uses "label" to match frontend data model
   await db`
     CREATE TABLE IF NOT EXISTS options (
@@ -34,10 +42,75 @@ async function ensureTables() {
       position   INTEGER DEFAULT 0
     )
   `;
-  // Migration: add "label" column if the table was created with "text" instead
-  try {
-    await db`ALTER TABLE options ADD COLUMN IF NOT EXISTS label TEXT`;
-  } catch (_) { /* column already exists */ }
+
+  // Seeding: check if options table is empty
+  const optionsCount = await db`SELECT count(*) FROM options`;
+  if (parseInt(optionsCount[0].count) === 0) {
+    console.log("No options found in options table. Resetting tables and seeding fresh default surveys...");
+    await db`DELETE FROM options`;
+    await db`DELETE FROM surveys`;
+
+    const DEFAULT_SURVEYS = [
+      {
+        id: "seed-survey-1",
+        title: "What major feature should we build next for Decision Arena?",
+        description: "Help us prioritize our roadmap. We want to know which integrations and capabilities matter most to you.",
+        status: "active",
+        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        startDate: null,
+        endDate: null,
+        options: [
+          { id: "seed-opt-1-1", label: "Real-time Database Sync (Firebase/Supabase)", votes: 42 },
+          { id: "seed-opt-1-2", label: "Social Identity Logins (Google, GitHub, Apple)", votes: 28 },
+          { id: "seed-opt-1-3", label: "Interactive charts and PDF reports export", votes: 19 },
+          { id: "seed-opt-1-4", label: "Slack & Discord notification webhooks", votes: 35 }
+        ]
+      },
+      {
+        id: "seed-survey-2",
+        title: "Where should we host the 2026 Developer Retreat?",
+        description: "Voting is open to all community members. Select your dream destination for a week of hacking and outdoor adventures.",
+        status: "active",
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 86400000 * 3).toISOString(),
+        options: [
+          { id: "seed-opt-2-1", label: "Kyoto Temple Stays & Bamboo Forests", votes: 64 },
+          { id: "seed-opt-2-2", label: "Swiss Alps Alpine Hackhouse & Skiing", votes: 88 },
+          { id: "seed-opt-2-3", label: "Cape Town Beach Villa & Wildlife Safari", votes: 47 }
+        ]
+      },
+      {
+        id: "seed-survey-3",
+        title: "What is your default IDE color theme preference?",
+        description: "Let us know what color scheme keeps you in the flow state during long coding sessions.",
+        status: "active",
+        createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+        startDate: null,
+        endDate: null,
+        options: [
+          { id: "seed-opt-3-1", label: "Nordic Minimal (Cold Grays & Blues)", votes: 12 },
+          { id: "seed-opt-3-2", label: "Dracula / Premium Pitch Dark", votes: 45 },
+          { id: "seed-opt-3-3", label: "Warm Editorial Light Theme (Lavender-White)", votes: 29 },
+          { id: "seed-opt-3-4", label: "Monokai Classic Retro", votes: 8 }
+        ]
+      }
+    ];
+
+    for (const s of DEFAULT_SURVEYS) {
+      await db`
+        INSERT INTO surveys (id, title, description, status, created_at, start_date, end_date)
+        VALUES (${s.id}, ${s.title}, ${s.description}, ${s.status}, ${s.createdAt}, ${s.startDate}, ${s.endDate})
+      `;
+      for (let i = 0; i < s.options.length; i++) {
+        const opt = s.options[i];
+        await db`
+          INSERT INTO options (id, survey_id, label, votes, position)
+          VALUES (${opt.id}, ${s.id}, ${opt.label}, ${opt.votes}, ${i})
+        `;
+      }
+    }
+  }
 }
 
 async function parseBody(req) {
