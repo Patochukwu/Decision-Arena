@@ -1,8 +1,7 @@
 {
-  "rewrites": [
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/(.*)", "dest": "/api/surveys" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
